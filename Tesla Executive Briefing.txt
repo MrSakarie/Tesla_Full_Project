@@ -1,0 +1,15 @@
+Tesla Executive Briefing
+My Task :
+Using the provided dataset, i need to answer questions such as :
+1. what percentage of EVs in Washington re tesla?
+2. to tesla models selling in the area 
+	-How much are we making form these models?
+3. Tesla vs Competitors 
+	- Range and MSRP 
+	-AVR and Median 
+4. PHEV vs BEV Trends
+5. Top Electric Utilities in Washington for tesla
+
+Deliverable:
+Doesn't care, just wants to see numbers and maybe some graphs.
+

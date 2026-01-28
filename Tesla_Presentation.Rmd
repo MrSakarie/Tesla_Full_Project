@@ -1,0 +1,221 @@
+---
+title: "Tesla_Presentation"
+output:
+  flexdashboard::flex_dashboard:
+    vertical_layout: scroll
+---
+
+```{r}
+
+# Libraries
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+# Read Dataset
+library(readxl)
+df <- read.csv("Electric_Vehicle_Population_Data.csv")
+
+# Cleaning Dataset Section
+clean_df <- df %>% 
+  rename_all(~gsub("\\.","_",.)) %>% 
+  mutate(
+    TESLA = ifelse(Make=="TESLA","TESLA","OTHER")
+  )
+
+# 1.what percentage of EVs in Washington re tesla?
+total_vehicle <- nrow(clean_df)
+tesla_vehicle <- clean_df %>% filter(TESLA=="TESLA") %>% nrow()
+tesla_market_share <- round(tesla_vehicle/total_vehicle*100,1)
+
+
+#2. to tesla models selling in the area?
+
+make_model_sold <- clean_df %>% 
+  filter(TESLA=="TESLA") %>% 
+  group_by(Make,Model) %>% 
+  summarise(Count=n(), .groups = "drop") %>% 
+  arrange(desc(Count)) 
+
+
+#-How much are we making form these models?
+msrp_by_year <- clean_df %>% 
+  filter(Base_MSRP> 0) %>% 
+  filter(TESLA=="TESLA") %>% 
+  group_by(Model_Year,Make,Model) %>% 
+  summarise(min(Base_MSRP), .groups = "drop") %>% 
+  arrange(Model_Year,Make,Model)
+
+# there weren't good base msrp data in dataset-supplementing
+
+df_tesla_prices <- read.csv("Tesla_Current_Base_Prices.csv")
+
+
+df_tesla_prices <- df_tesla_prices %>% 
+  mutate(
+    Model= toupper(Model)
+  )
+
+#getting our number
+Top_tesla_model_price <- make_model_sold %>% 
+  left_join(df_tesla_prices,by="Model") %>% 
+  mutate(
+    Estimate_Revenue=as.numeric(Count)*as.numeric(Base_Price_USD)
+  )
+
+# final estimation for lifetime sales
+Top_tesla_model_price <- Top_tesla_model_price %>% 
+  filter(!is.na(Estimate_Revenue)) %>% 
+  group_by(Model) %>% 
+  slice_min(Base_Price_USD) %>% 
+  ungroup()
+
+# Tesla Sold By Year
+tesla_sold_by_year <- clean_df %>%
+  filter(TESLA=="TESLA") %>% 
+  group_by(Model_Year) %>% 
+  summarise(Count=n()) %>% 
+  arrange(desc(Model_Year))
+
+
+
+
+# 3. Tesla vs Competitors
+# AVR and Median
+# Range and MSRP
+
+
+# AVR Range
+Range_for_EVs <- clean_df %>% 
+  filter(Electric_Vehicle_Type=="Battery Electric Vehicle (BEV)",Electric_Range !=0,
+         Base_MSRP !=0) %>% 
+  group_by(TESLA) %>% 
+  summarise(AVR_Range=mean(Electric_Range),
+                          median_msrp=mean(Base_MSRP ))
+
+# Median Range
+Median_Range_for_EVs <- clean_df %>% 
+  filter(Electric_Vehicle_Type=="Battery Electric Vehicle (BEV)",Electric_Range !=0,
+         Base_MSRP !=0) %>% 
+  group_by(TESLA) %>% 
+  summarise(Median_Range=median(Electric_Range),
+            Median_Msrp=median(Base_MSRP))
+
+#4. PHEV vs BEV Trends
+
+bhev_vs_bev <- clean_df %>% 
+  group_by(Model_Year,Electric_Vehicle_Type) %>% 
+  summarise(Count=n(),.groups = "drop")
+
+
+#5.Top Electric Utilities in Washington for tesla
+
+Utility_Counter_for_Tesla <- clean_df %>% 
+  filter(TESLA=="TESLA") %>% 
+  group_by(Electric_Utility) %>% 
+  summarise(Count=n()) %>% 
+  arrange(desc(Count)) %>% 
+  head(5)
+
+
+```
+
+### Tesla Market Share in Wahington (%)
+
+```{r}
+Market_df <- data.frame(
+  Group= c("TESLA","OTHER"),
+  Market_Share=c(tesla_market_share,100-tesla_market_share)
+)
+
+Market_df <- Market_df %>% 
+  mutate(
+    label= paste0(Market_Share,"%"),
+    ypos= cumsum(Market_Share) -0.5 * Market_Share
+  )
+
+
+
+ggplot(Market_df,aes(x="", y=Market_Share,fill = Group))+
+  geom_col(width=1)+
+  coord_polar("y")+
+  geom_text(aes(y=ypos,label = label))+
+  labs(title = "Tesla Market Share in Wahington (%)")+
+  theme_void()
+```
+
+
+### Tesla Model Sold-All Time
+
+```{r}
+ggplot(make_model_sold,aes(x = reorder(Model,Count),y=Count))+
+  geom_col( fill="dodgerblue")+
+  coord_flip()+
+    labs(title = "Tesla Model Sold-All Time")+
+  theme_minimal()
+```
+
+### Estimated_Revenue_Per_Model
+
+```{r}
+ggplot(Top_tesla_model_price,aes(x = reorder(Model,Estimate_Revenue),y=Estimate_Revenue))+
+  geom_col( fill="forestgreen")+
+  coord_flip()+
+  labs(title = "Estimate_Revenue_Per_Model")+
+  scale_y_continuous(labels = label_comma())+
+  theme_minimal()
+```
+
+### Tesla Vehicle Sold by Year
+
+```{r}
+ggplot(tesla_sold_by_year,aes(x= Model_Year, y= Count))+
+  geom_line(color="dodgerblue",size=1.1)+
+  geom_point(color="navyblue",size=2)+
+  labs(title = "Tesla Vehicle Sold by Year")+
+  theme_minimal()
+```
+
+### AVR Electric Range (BEV)
+
+```{r}
+# Range
+ggplot(Range_for_EVs,aes(x= TESLA,y=AVR_Range,fill = TESLA))+
+  geom_col()+
+  labs(title = "AVR Electric Range (BEV)")+
+  theme_minimal()
+```
+
+
+### AVR MSRP (BEV)
+```{r}
+ggplot(Range_for_EVs,aes(x= TESLA,y=median_msrp,fill = TESLA))+
+  geom_col()+
+  labs(title = "AVR MSRP (BEV)")+
+  theme_minimal()
+```
+
+### PHEV VS BEV Trends Over Time
+
+```{r}
+ggplot(bhev_vs_bev,aes(x= Model_Year, y= Count,color=Electric_Vehicle_Type))+
+  geom_line(size=1.1)+
+  geom_point(size=2)+
+  labs(title = "PHEV VS BEV Trends Over Time")+
+  theme_minimal()
+
+```
+
+### Top Electric For Tesla in Washington
+
+```{r}
+ggplot(Utility_Counter_for_Tesla,aes(x=reorder(Electric_Utility,Count), y=Count))+
+  geom_col(color="white",fill="navyblue")+
+  coord_flip()+
+  labs(title = "Top Electric For Tesla in Washington", x="Utility")+
+  theme_minimal()+
+  theme(axis.text.y = element_text(size = 4))
+```
+
+
